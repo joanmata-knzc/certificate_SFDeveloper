@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Testing, Debug & Deployment — Salesforce PDI Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dev_style.css">
+</head>
+<body>
+
+<div class="back-bar">
+    <div class="container">
+        <a href="INDEX_START_HERE.html" class="back-link">← Volver al Índice</a>
+        <span class="page-label">Bloque 4 · Testing, Debugging & Deployment · 20% del examen</span>
+    </div>
+</div>
+
+<div class="container">
+    <div class="page-header">
+        <span class="brand-tag" style="background:#f0fdf4; color:var(--dev-green);">Testing, Debug &amp; Deployment</span>
+        <h1>Pruebas, Debugging y Despliegue</h1>
+        <p>Garantizar la calidad del código y moverlo con seguridad entre entornos.</p>
+    </div>
+
+    <!-- 1. APEX UNIT TESTING -->
+    <section class="content-section">
+        <h2 class="section-header">1. Apex Unit Testing — La Cobertura del 75%</h2>
+
+        <div class="highlight-box">
+            <strong>Regla clave:</strong> No puedes desplegar código Apex a producción si la cobertura total de tests es inferior al <strong>75%</strong>. Cada clase individual no necesita ser 75%, pero el agregado de toda la org sí.
+        </div>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>📋 Reglas de los Tests en Apex</h3>
+                <ul>
+                    <li>La clase debe anotarse con <code>@isTest</code>.</li>
+                    <li>Los métodos de test deben ser <code>static void</code> y anotarse con <code>@isTest</code> (o <code>testMethod</code>).</li>
+                    <li><strong>Aislamiento:</strong> Por defecto <code>@isTest(SeeAllData=false)</code>. Los tests NO ven datos reales de la org. Debes crear tus propios datos de test.</li>
+                    <li>La cobertura mide líneas ejecutadas, no la corrección de la lógica.</li>
+                    <li>Los tests no consumen governor limits de producción.</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>🏗️ Estructura de una Clase de Test</h3>
+                <pre><code>@isTest
+private class AccountServiceTest {
+
+    // Setup: datos que comparten todos los tests de esta clase
+    @TestSetup
+    static void crearDatos() {
+        Account a = new Account(Name = 'Test Account');
+        insert a;
+    }
+
+    @isTest
+    static void testCrearCuenta() {
+        // Arrange — preparar datos
+        Account acc = [SELECT Id FROM Account WHERE Name = 'Test Account' LIMIT 1];
+
+        // Act — ejecutar la lógica
+        Test.startTest();
+        AccountService.procesarCuenta(acc.Id);
+        Test.stopTest();
+
+        // Assert — verificar el resultado
+        Account resultado = [SELECT Rating FROM Account WHERE Id = :acc.Id];
+        System.assertEquals('Hot', resultado.Rating, 'El Rating debería ser Hot');
+    }
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="topic-box">
+            <h3>⏱️ Test.startTest() y Test.stopTest()</h3>
+            <ul>
+                <li><strong>startTest():</strong> Resetea los governor limits dentro del bloque. El código entre start y stop tiene sus propios límites frescos.</li>
+                <li><strong>stopTest():</strong> Finaliza la ejecución y también <strong>obliga a los jobs asíncronos a completarse</strong> antes de continuar. Esencial para testar Batch Apex, @future y Queueable.</li>
+                <li>Solo puede haber un par startTest/stopTest por método de test.</li>
+            </ul>
+        </div>
+
+        <div class="topic-box">
+            <h3>🏭 @TestSetup vs Crear Datos en cada Método</h3>
+            <table class="compare-table">
+                <thead><tr><th></th><th>@TestSetup</th><th>Datos en cada método</th></tr></thead>
+                <tbody>
+                    <tr><td>Rendimiento</td><td>✅ Más rápido (DML una sola vez)</td><td>❌ Más lento</td></tr>
+                    <tr><td>Aislamiento</td><td>Cada test obtiene su propia copia</td><td>Totalmente independiente</td></tr>
+                    <tr><td>Recomendado</td><td>Para datos comunes a todos los tests</td><td>Para datos muy específicos de un test</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="topic-box">
+            <h3>🔌 Testar Callouts HTTP — Test.setMock()</h3>
+            <p>No puedes hacer callouts reales en tests. Debes usar un Mock.</p>
+            <pre><code>// 1. Crear la clase Mock que implementa HttpCalloutMock
+@isTest
+global class MockCallout implements HttpCalloutMock {
+    global HttpResponse respond(HttpRequest req) {
+        HttpResponse res = new HttpResponse();
+        res.setStatusCode(200);
+        res.setBody('{"name":"Acme"}');
+        return res;
+    }
+}
+
+// 2. Usarlo en el test
+@isTest
+static void testCallout() {
+    Test.setMock(HttpCalloutMock.class, new MockCallout());
+    Test.startTest();
+    MiClaseDeCallout.hacerPeticion();
+    Test.stopTest();
+    // asserts aquí
+}</code></pre>
+        </div>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> El propósito del test NO es solo alcanzar el 75% de cobertura — es el <strong>Assert</strong>. Un test sin <code>System.assertEquals()</code> no verifica nada. El examen distingue entre "código con cobertura" y "código bien testeado".
+        </div>
+    </section>
+
+    <!-- 2. DEBUGGING -->
+    <section class="content-section">
+        <h2 class="section-header">2. Debugging — Herramientas para Encontrar el Error</h2>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>📋 Debug Logs</h3>
+                <ul>
+                    <li><strong>Dónde:</strong> Setup → Logs → Debug Logs.</li>
+                    <li>Puedes activar logs para un usuario específico durante un tiempo determinado.</li>
+                    <li>Los logs muestran: SOQL ejecutados, DML, excepciones, salidas de <code>System.debug()</code>.</li>
+                    <li><strong>Niveles:</strong> NONE, ERROR, WARN, INFO, DEBUG, FINE, FINER, FINEST. Cada nivel añade más detalle.</li>
+                    <li>El Developer Console los muestra en tiempo real.</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>🔍 Developer Console</h3>
+                <ul>
+                    <li>Herramienta integrada en el navegador para desarrollar y depurar.</li>
+                    <li><strong>Execute Anonymous:</strong> Ejecuta código Apex directamente sin crear una clase. Ideal para pruebas rápidas.</li>
+                    <li><strong>Query Editor:</strong> Ejecuta SOQL y SOSL de forma interactiva.</li>
+                    <li><strong>Checkpoints:</strong> Equivalente a breakpoints; pausan la ejecución y muestran el estado del heap.</li>
+                    <li><strong>Log Inspector:</strong> Visualiza los debug logs con filtros por tipo.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="topic-box">
+            <h3>🛠️ Otras Herramientas</h3>
+            <table class="compare-table">
+                <thead><tr><th>Herramienta</th><th>Uso</th></tr></thead>
+                <tbody>
+                    <tr><td>Salesforce CLI (<code>sf apex run</code>)</td><td>Ejecutar código Apex anónimo desde terminal. Ideal en CI/CD.</td></tr>
+                    <tr><td>VS Code + Salesforce Extension Pack</td><td>IDE completo con autocompletado, deploy/retrieve, debug integrado.</td></tr>
+                    <tr><td>Workbench</td><td>Herramienta web para SOQL, SOSL, REST API y metadata. Útil para explorar datos rápido.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 3. ENTORNOS -->
+    <section class="content-section">
+        <h2 class="section-header">3. Entornos — Tipos de Sandbox</h2>
+
+        <table class="compare-table">
+            <thead><tr><th>Tipo</th><th>Storage</th><th>Datos de Prod</th><th>Refresh</th><th>Uso típico</th></tr></thead>
+            <tbody>
+                <tr><td>Developer</td><td>200 MB datos + 200 MB archivos</td><td>Sin datos</td><td>1 día</td><td>Desarrollo individual. El más usado para code.</td></tr>
+                <tr><td>Developer Pro</td><td>1 GB datos + 1 GB archivos</td><td>Sin datos</td><td>1 día</td><td>Proyectos que necesitan más espacio.</td></tr>
+                <tr><td>Partial Copy</td><td>5 GB datos</td><td>Muestra aleatoria</td><td>5 días</td><td>QA y testing con datos representativos.</td></tr>
+                <tr><td>Full</td><td>Igual que Producción</td><td>Todos los datos</td><td>29 días</td><td>Staging final, performance testing, UAT.</td></tr>
+            </tbody>
+        </table>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> El ciclo correcto de ALM es: <strong>Developer SB → Integration/QA SB → Full/UAT SB → Producción</strong>. Nunca se hace desarrollo directamente en producción.
+        </div>
+    </section>
+
+    <!-- 4. DESPLIEGUE -->
+    <section class="content-section">
+        <h2 class="section-header">4. Herramientas de Despliegue</h2>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>📦 Change Sets</h3>
+                <ul>
+                    <li>Herramienta declarativa dentro de Setup. No requiere herramientas externas.</li>
+                    <li>Mueve metadatos entre orgs que están <strong>conectadas</strong> (Deployment Connections).</li>
+                    <li><strong>Outbound Change Set:</strong> Lo creas en el origen (sandbox) y añades los componentes.</li>
+                    <li><strong>Inbound Change Set:</strong> Lo validas y despliegas en el destino (producción).</li>
+                    <li><strong>Limitaciones:</strong> No soporta todos los tipos de metadatos. No es compatible con Git.</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>⚡ Salesforce CLI (SFDX)</h3>
+                <ul>
+                    <li>Herramienta de línea de comandos para desarrolladores.</li>
+                    <li>Trabaja con proyectos en <strong>source format</strong> (metadata como archivos locales en Git).</li>
+                    <li><code>sf project deploy start</code> — Despliega a una org.</li>
+                    <li><code>sf project retrieve start</code> — Descarga metadata de una org.</li>
+                    <li>Permite <strong>CI/CD</strong>: despliegues automáticos desde GitHub Actions, Jenkins, etc.</li>
+                    <li>Soporta <strong>scratch orgs</strong> para desarrollo aislado.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="topic-box">
+            <h3>📋 Opciones de Despliegue — Comparativa</h3>
+            <table class="compare-table">
+                <thead><tr><th>Herramienta</th><th>Requiere Git</th><th>Soporta CI/CD</th><th>Todos los tipos metadata</th><th>Facilidad</th></tr></thead>
+                <tbody>
+                    <tr><td>Change Sets</td><td>❌</td><td>❌</td><td>❌ Limitados</td><td>⭐⭐⭐⭐⭐ Muy fácil</td></tr>
+                    <tr><td>Salesforce CLI</td><td>✅</td><td>✅</td><td>✅</td><td>⭐⭐⭐ Requiere conocimiento</td></tr>
+                    <tr><td>Metadata API</td><td>Opcional</td><td>✅</td><td>✅</td><td>⭐⭐ Técnico</td></tr>
+                    <tr><td>Ant Migration Tool</td><td>Opcional</td><td>✅</td><td>✅</td><td>⭐⭐ Legacy</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="highlight-box">
+            <strong>🔑 Requisito de Despliegue a Producción:</strong><br>
+            Al desplegar código Apex a producción, la cobertura total de tests de la org debe ser ≥75% y todos los tests deben pasar. Si despliegas un trigger, ese trigger específico también debe tener al menos alguna cobertura.
+        </div>
+    </section>
+
+    <footer>
+        <p>Joan Mata & Konozca &copy; 2026 | Salesforce Developer Reference Guide</p>
+    </footer>
+</div>
+</body>
+</html>

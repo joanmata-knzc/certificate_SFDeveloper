@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Developer Fundamentals — Salesforce PDI Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dev_style.css">
+</head>
+<body>
+
+<div class="back-bar">
+    <div class="container">
+        <a href="INDEX_START_HERE.html" class="back-link">← Volver al Índice</a>
+        <span class="page-label">Bloque 1 · Developer Fundamentals · 27% del examen</span>
+    </div>
+</div>
+
+<div class="container">
+    <div class="page-header">
+        <span class="brand-tag">Developer Fundamentals</span>
+        <h1>Fundamentos del Desarrollador Salesforce</h1>
+        <p>La plataforma multitenant, Apex desde cero, SOQL/SOSL y seguridad en código.</p>
+    </div>
+
+    <!-- 1. PLATAFORMA MULTITENANT -->
+    <section class="content-section">
+        <h2 class="section-header">1. La Plataforma Salesforce: Multitenant y Metadata-Driven</h2>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>🏗️ Arquitectura Multitenant</h3>
+                <p>Múltiples organizaciones (tenants) comparten la misma infraestructura física, pero están completamente aisladas entre sí.</p>
+                <ul>
+                    <li><strong>¿Por qué importa?</strong> Esta arquitectura es la razón de ser de los Governor Limits: el sistema protege a todos los tenants de que uno solo consuma todos los recursos.</li>
+                    <li>El código Apex se ejecuta en un runtime compartido, de ahí los límites de CPU, memoria y SOQL.</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>📐 Metadata-Driven Development</h3>
+                <p>En Salesforce, todo (objetos, campos, flows, código) es <strong>metadata</strong>. Se almacena separado de los datos reales.</p>
+                <ul>
+                    <li>Esto permite mover configuración entre orgs sin mover datos.</li>
+                    <li>El <strong>Schema Builder</strong> y el <strong>Object Manager</strong> editan metadata visualmente.</li>
+                    <li>La Salesforce CLI (SFDX) trabaja directamente con metadata en formato XML.</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 2. TIPOS DE DATOS APEX -->
+    <section class="content-section">
+        <h2 class="section-header">2. Tipos de Datos en Apex</h2>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>📌 Primitivos</h3>
+                <ul>
+                    <li><strong>String:</strong> Texto entre comillas simples. <code>'Hola Mundo'</code></li>
+                    <li><strong>Integer:</strong> Números enteros de 32 bits. <code>42</code></li>
+                    <li><strong>Long:</strong> Enteros de 64 bits (para números muy grandes).</li>
+                    <li><strong>Decimal:</strong> Números con decimales. Ideal para moneda. <code>9.99</code></li>
+                    <li><strong>Double:</strong> Punto flotante de 64 bits.</li>
+                    <li><strong>Boolean:</strong> <code>true</code> o <code>false</code></li>
+                    <li><strong>ID:</strong> Identificador único de 15 o 18 caracteres. Salesforce lo convierte automáticamente.</li>
+                    <li><strong>Date:</strong> Solo fecha. <code>Date.today()</code></li>
+                    <li><strong>DateTime:</strong> Fecha + hora. <code>DateTime.now()</code></li>
+                    <li><strong>Blob:</strong> Datos binarios (para archivos y adjuntos).</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>📦 sObject — El Tipo Especial de Salesforce</h3>
+                <p>Un <code>sObject</code> representa un registro de Salesforce. Puede ser genérico o específico.</p>
+                <pre><code>// Específico (recomendado - type safe)
+Account acc = new Account();
+acc.Name = 'Acme';
+acc.Phone = '123456789';
+
+// Genérico (útil en métodos que trabajan con cualquier objeto)
+sObject obj = new Account();
+obj.put('Name', 'Acme');</code></pre>
+                <ul>
+                    <li>Puedes construir un sObject pasando campos en el constructor.</li>
+                    <li>Los campos personalizados se acceden igual: <code>acc.Campo_Custom__c</code></li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. COLECCIONES -->
+    <section class="content-section">
+        <h2 class="section-header">3. Colecciones — La Base de la Bulkificación</h2>
+
+        <p style="color:var(--text-muted); margin-bottom:20px;">Las colecciones son esenciales para procesar múltiples registros de una vez y respetar los Governor Limits.</p>
+
+        <table class="compare-table">
+            <thead>
+                <tr><th>Tipo</th><th>Ordenada</th><th>Duplicados</th><th>Acceso</th><th>Caso de uso principal</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>List&lt;T&gt;</td><td>✅ Sí</td><td>✅ Sí</td><td>Por índice (0, 1, 2...)</td><td>Resultados de SOQL, procesamiento secuencial.</td></tr>
+                <tr><td>Set&lt;T&gt;</td><td>❌ No</td><td>❌ No</td><td><code>contains()</code></td><td>Recopilar IDs únicos para filtrar en SOQL.</td></tr>
+                <tr><td>Map&lt;K,V&gt;</td><td>❌ No</td><td>Keys únicas</td><td>Por Key (<code>get(key)</code>)</td><td>Agrupar registros por ID. Acceso O(1).</td></tr>
+            </tbody>
+        </table>
+
+        <div class="good-bad">
+            <div class="bad">
+                <h4>❌ MAL — SOQL dentro de un Loop</h4>
+                <pre><code>for (Account a : accounts) {
+    // SOQL en cada iteración = Governor Limit!
+    List&lt;Contact&gt; cons = [SELECT Id FROM Contact
+                          WHERE AccountId = :a.Id];
+}</code></pre>
+            </div>
+            <div class="good">
+                <h4>✅ BIEN — Bulkificado con Map</h4>
+                <pre><code>Set&lt;Id&gt; accIds = new Map&lt;Id, Account&gt;(accounts).keySet();
+Map&lt;Id, List&lt;Contact&gt;&gt; contactsByAcc = new Map&lt;Id, List&lt;Contact&gt;&gt;();
+for (Contact c : [SELECT Id, AccountId FROM Contact WHERE AccountId IN :accIds]) {
+    if (!contactsByAcc.containsKey(c.AccountId))
+        contactsByAcc.put(c.AccountId, new List&lt;Contact&gt;());
+    contactsByAcc.get(c.AccountId).add(c);
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> "Nunca pongas SOQL ni DML dentro de un loop" es la regla número 1 de Apex. Casi todas las preguntas sobre Governor Limits tienen este patrón como respuesta incorrecta que debes identificar.
+        </div>
+    </section>
+
+    <!-- 4. SOQL -->
+    <section class="content-section">
+        <h2 class="section-header">4. SOQL — Salesforce Object Query Language</h2>
+        <p style="color:var(--text-muted); margin-bottom:20px;">Para leer registros de la base de datos. Se escribe entre corchetes <code>[...]</code> en Apex (inline SOQL).</p>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>🔗 Relaciones en SOQL</h3>
+                <ul>
+                    <li><strong>Hijo → Padre (Traversal):</strong> Navegar hacia el padre usando el nombre del campo de relación.<br><code>SELECT Account.Name FROM Contact</code></li>
+                    <li><strong>Padre → Hijos (Subquery):</strong> Usar el nombre de la relación hijo en plural.<br><code>SELECT Id, (SELECT LastName FROM Contacts) FROM Account</code></li>
+                    <li>El resultado de la subquery es una <code>List&lt;sObject&gt;</code> accesible desde el padre.</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>🛠️ Cláusulas y Funciones</h3>
+                <ul>
+                    <li><code>WHERE field = :apexVar</code> — Bind variable (pasar variables de Apex a SOQL).</li>
+                    <li><code>ORDER BY</code>, <code>LIMIT</code>, <code>OFFSET</code> — Paginación.</li>
+                    <li><code>GROUP BY</code> — Requiere funciones de agregado (<code>COUNT()</code>, <code>SUM()</code>, <code>AVG()</code>).</li>
+                    <li><code>HAVING</code> — Filtrar resultados agregados (como un WHERE para GROUP BY).</li>
+                    <li><code>FOR UPDATE</code> — Bloquea registros mientras se procesan.</li>
+                </ul>
+            </div>
+        </div>
+
+        <pre><code>// Aggregate SOQL con GROUP BY
+List&lt;AggregateResult&gt; results = [
+    SELECT StageName, COUNT(Id) total, SUM(Amount) revenue
+    FROM Opportunity
+    WHERE CloseDate = THIS_YEAR
+    GROUP BY StageName
+    HAVING COUNT(Id) &gt; 5
+];
+for (AggregateResult ar : results) {
+    System.debug('Stage: ' + ar.get('StageName') + ' | Count: ' + ar.get('total'));
+}</code></pre>
+
+        <div class="governor-limit">
+            <strong>🚨 Límites SOQL a recordar:</strong>
+            <ul>
+                <li>Máximo <strong>100 consultas SOQL</strong> síncronas por transacción.</li>
+                <li>Máximo <strong>200 consultas</strong> en modo asíncrono.</li>
+                <li>Máximo <strong>50,000 registros</strong> recuperados por transacción.</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- 5. SOSL -->
+    <section class="content-section">
+        <h2 class="section-header">5. SOSL — Salesforce Object Search Language</h2>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>🔍 ¿Qué es SOSL?</h3>
+                <p>Búsqueda de texto en múltiples objetos a la vez usando el motor de búsqueda (Lucene). Devuelve <code>List&lt;List&lt;sObject&gt;&gt;</code>.</p>
+                <pre><code>List&lt;List&lt;sObject&gt;&gt; results = [FIND 'Acme*'
+    IN ALL FIELDS
+    RETURNING Account(Name, Phone), Contact(FirstName, LastName)];
+
+List&lt;Account&gt; accs = (List&lt;Account&gt;) results[0];
+List&lt;Contact&gt; cons = (List&lt;Contact&gt;) results[1];</code></pre>
+            </div>
+            <div class="topic-box">
+                <h3>⚖️ SOQL vs SOSL</h3>
+                <table class="compare-table">
+                    <tr><th></th><th>SOQL</th><th>SOSL</th></tr>
+                    <tr><td>Busca en</td><td>Un objeto</td><td>Múltiples objetos</td></tr>
+                    <tr><td>Tipo búsqueda</td><td>Campo exacto</td><td>Texto libre (wildcards)</td></tr>
+                    <tr><td>Resultado</td><td><code>List&lt;sObject&gt;</code></td><td><code>List&lt;List&lt;sObject&gt;&gt;</code></td></tr>
+                    <tr><td>Límite registros</td><td>50,000</td><td>2,000</td></tr>
+                    <tr><td>Usa índices de texto</td><td>No</td><td>Sí</td></tr>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- 6. SEGURIDAD EN CÓDIGO -->
+    <section class="content-section">
+        <h2 class="section-header">6. Seguridad en Código: CRUD, FLS y Sharing</h2>
+
+        <div class="topic-box">
+            <h3>⚠️ El problema: Apex se ejecuta en System Mode por defecto</h3>
+            <p>Por defecto, el código Apex <strong>ignora los permisos del usuario</strong> (perfiles, FLS, sharing rules). Puede leer y escribir cualquier dato. Como desarrollador, debes verificar permisos manualmente si necesitas respetar la seguridad.</p>
+        </div>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>🔐 With Sharing / Without Sharing</h3>
+                <ul>
+                    <li><code>with sharing</code>: La clase respeta las Sharing Rules del usuario. Los registros que no tiene acceso no aparecen en las queries.</li>
+                    <li><code>without sharing</code>: La clase ignora las reglas de sharing. Ve todos los registros.</li>
+                    <li><code>inherited sharing</code>: Hereda el contexto de quien la llamó.</li>
+                </ul>
+                <pre><code>public with sharing class AccountController {
+    public List&lt;Account&gt; getMyAccounts() {
+        // Solo devuelve cuentas que el usuario puede ver
+        return [SELECT Id, Name FROM Account];
+    }
+}</code></pre>
+            </div>
+            <div class="topic-box">
+                <h3>🛡️ Verificar CRUD y FLS</h3>
+                <p>El sharing solo controla qué <em>registros</em> se ven. Para controlar qué <em>campos y objetos</em> puede modificar el usuario, debes verificar explícitamente:</p>
+                <pre><code>// Verificar permiso de Create en Account
+if (!Schema.sObjectType.Account.isCreateable()) {
+    throw new AuraHandledException('No tienes permiso de crear cuentas.');
+}
+
+// Verificar que un campo es editable
+if (!Schema.sObjectType.Account.fields.Phone.isUpdateable()) {
+    // No actualizar ese campo
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> <code>with sharing</code> controla la VISIBILIDAD de registros (Sharing/OWD). Los permisos de CRUD y FLS debes verificarlos tú con <code>Schema.sObjectType</code>. Son conceptos distintos y el examen suele confundirlos intencionalmente.
+        </div>
+    </section>
+
+    <footer>
+        <p>Joan Mata & Konozca &copy; 2026 | Salesforce Developer Reference Guide</p>
+    </footer>
+</div>
+</body>
+</html>

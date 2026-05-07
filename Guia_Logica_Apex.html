@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Automation & Logic — Salesforce PDI Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dev_style.css">
+</head>
+<body>
+
+<div class="back-bar">
+    <div class="container">
+        <a href="INDEX_START_HERE.html" class="back-link">← Volver al Índice</a>
+        <span class="page-label">Bloque 2 · Process Automation & Logic · 28% del examen</span>
+    </div>
+</div>
+
+<div class="container">
+    <div class="page-header">
+        <span class="brand-tag">Process Automation &amp; Logic</span>
+        <h1>Clases Apex, Triggers y Automatización</h1>
+        <p>El bloque más pesado del examen. Programar en Apex de forma segura y escalable.</p>
+    </div>
+
+    <!-- 1. CLASES -->
+    <section class="content-section">
+        <h2 class="section-header">1. Clases Apex — Estructura y Modificadores</h2>
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>🔒 Modificadores de Acceso</h3>
+                <ul>
+                    <li><strong>public:</strong> Accesible desde cualquier clase en la org.</li>
+                    <li><strong>private:</strong> Solo dentro de la misma clase.</li>
+                    <li><strong>protected:</strong> Clase y sus subclases.</li>
+                    <li><strong>global:</strong> Accesible desde paquetes externos y APIs.</li>
+                    <li><strong>virtual:</strong> Permite sobreescribir el método en una subclase.</li>
+                    <li><strong>abstract:</strong> La clase no puede instanciarse; debe ser extendida.</li>
+                    <li><strong>override:</strong> Sobreescribe un método virtual del padre.</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>🧬 Interfaces</h3>
+                <p>Define un contrato sin implementación. Las clases que la usan implementan todos sus métodos.</p>
+                <pre><code>public interface Notificable {
+    void enviarAlerta(String msg);
+}
+public class EmailService implements Notificable {
+    public void enviarAlerta(String msg) {
+        // implementación concreta
+    }
+}</code></pre>
+                <p style="margin-top:8px; font-size:0.85rem;">Las interfaces de Salesforce más comunes: <code>Database.Batchable</code>, <code>Queueable</code>, <code>Schedulable</code>.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 2. TRIGGERS -->
+    <section class="content-section">
+        <h2 class="section-header">2. Apex Triggers — Patrón Handler</h2>
+
+        <table class="compare-table">
+            <thead><tr><th>Evento</th><th>Trigger.new</th><th>Trigger.old</th><th>¿Modificable?</th><th>Uso típico</th></tr></thead>
+            <tbody>
+                <tr><td>before insert</td><td>✅</td><td>❌</td><td>✅ Sí</td><td>Validar / rellenar campos antes de guardar.</td></tr>
+                <tr><td>before update</td><td>✅</td><td>✅</td><td>✅ Sí</td><td>Comparar valor anterior vs nuevo.</td></tr>
+                <tr><td>before delete</td><td>❌</td><td>✅</td><td>❌</td><td>Bloquear borrado con <code>addError()</code>.</td></tr>
+                <tr><td>after insert</td><td>✅ (con ID)</td><td>❌</td><td>❌</td><td>Crear registros relacionados.</td></tr>
+                <tr><td>after update</td><td>✅</td><td>✅</td><td>❌</td><td>Actualizar objetos relacionados.</td></tr>
+                <tr><td>after undelete</td><td>✅</td><td>❌</td><td>❌</td><td>Restaurar datos relacionados.</td></tr>
+            </tbody>
+        </table>
+
+        <div class="good-bad">
+            <div class="bad">
+                <h4>❌ MAL — Lógica directamente en el Trigger</h4>
+                <pre><code>trigger AccountTrigger on Account (before insert) {
+    for (Account a : Trigger.new) {
+        // 200 líneas de lógica aquí...
+    }
+}</code></pre>
+            </div>
+            <div class="good">
+                <h4>✅ BIEN — Patrón Handler (un trigger, una clase)</h4>
+                <pre><code>trigger AccountTrigger on Account (before insert, after insert) {
+    AccountTriggerHandler h = new AccountTriggerHandler();
+    if (Trigger.isBefore && Trigger.isInsert)
+        h.beforeInsert(Trigger.new);
+    if (Trigger.isAfter && Trigger.isInsert)
+        h.afterInsert(Trigger.new);
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> En <code>before</code> triggers puedes modificar <code>Trigger.new</code> sin DML adicional. En <code>after</code>, los registros ya tienen ID pero son de solo lectura.
+        </div>
+    </section>
+
+    <!-- 3. ORDER OF EXECUTION -->
+    <section class="content-section">
+        <h2 class="section-header">3. Order of Execution</h2>
+        <div class="highlight-box">
+            <strong>El tema más preguntado del examen PDI.</strong> Orden exacto cuando se guarda un registro:
+        </div>
+        <div class="topic-box">
+            <ol style="margin-left:20px; line-height:2.0; font-size:0.9rem;">
+                <li>Carga el registro original de la DB (o inicializa si es nuevo).</li>
+                <li>Carga los nuevos valores del request.</li>
+                <li>Ejecuta <strong>System Validation Rules</strong> (tipo de dato, campos required del sistema).</li>
+                <li>Ejecuta los <strong>Before Triggers</strong>.</li>
+                <li>Ejecuta las <strong>Custom Validation Rules</strong> (las del Setup del Admin).</li>
+                <li>Guarda el registro en la DB (sin commit todavía).</li>
+                <li>Ejecuta los <strong>After Triggers</strong>.</li>
+                <li>Ejecuta <strong>Assignment Rules</strong>.</li>
+                <li>Ejecuta <strong>Auto-response Rules</strong>.</li>
+                <li>Ejecuta <strong>Workflow Rules</strong> (Legacy). Si actualiza un campo → re-ejecuta Before Triggers y Validation Rules.</li>
+                <li>Ejecuta <strong>Record-Triggered Flows</strong> (Before-save → After-save).</li>
+                <li>Ejecuta <strong>Escalation Rules</strong> (solo Cases).</li>
+                <li>Hace el <strong>Commit</strong> final en la DB.</li>
+                <li>Ejecuta acciones post-commit (emails de Workflow, encola Async Apex).</li>
+            </ol>
+        </div>
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> Los Before Triggers van ANTES de las Validation Rules custom. Un Workflow que actualiza un campo provoca que los Before Triggers y Validation Rules se ejecuten <em>de nuevo</em> — esta es la pregunta trampa más clásica.
+        </div>
+    </section>
+
+    <!-- 4. GOVERNOR LIMITS -->
+    <section class="content-section">
+        <h2 class="section-header">4. Governor Limits</h2>
+        <div class="governor-limit">
+            <strong>🚨 Límites síncronos críticos por transacción:</strong>
+            <ul>
+                <li>Consultas SOQL: <strong>100</strong> (async: 200)</li>
+                <li>Registros devueltos por SOQL: <strong>50,000</strong></li>
+                <li>Sentencias DML: <strong>150</strong></li>
+                <li>Registros por DML: <strong>10,000</strong></li>
+                <li>Llamadas <code>@future</code>: <strong>50</strong></li>
+                <li>Tiempo de CPU: <strong>10,000 ms</strong></li>
+                <li>Heap Size (memoria): <strong>6 MB</strong></li>
+                <li>Callouts HTTP: <strong>100</strong></li>
+            </ul>
+        </div>
+        <div class="topic-box">
+            <h3>🔑 Reglas para evitar los límites</h3>
+            <ul>
+                <li><strong>Nunca SOQL dentro de un loop.</strong> Extrae IDs antes y usa <code>WHERE Id IN :setDeIds</code>.</li>
+                <li><strong>Nunca DML dentro de un loop.</strong> Acumula en una List y haz un solo <code>insert lista</code>.</li>
+                <li>Usa <code>Map&lt;Id, sObject&gt;</code> para acceder a registros sin queries adicionales.</li>
+                <li>Para millones de registros, usa <strong>Batch Apex</strong>.</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- 5. ASYNC APEX -->
+    <section class="content-section">
+        <h2 class="section-header">5. Apex Asíncrono</h2>
+
+        <table class="compare-table">
+            <thead><tr><th>Tipo</th><th>Cómo se define</th><th>Cuándo usarlo</th><th>Límites</th></tr></thead>
+            <tbody>
+                <tr><td>@future</td><td><code>@future static void</code></td><td>Callouts desde triggers. Operaciones simples en background.</td><td>200 SOQL, ampliados.</td></tr>
+                <tr><td>Queueable</td><td><code>implements Queueable</code></td><td>Jobs encadenables. Acepta objetos complejos como parámetros.</td><td>Ampliados. Puede encadenar.</td></tr>
+                <tr><td>Batch</td><td><code>implements Database.Batchable</code></td><td>Procesar millones de registros en chunks.</td><td>50M registros.</td></tr>
+                <tr><td>Scheduled</td><td><code>implements Schedulable</code></td><td>Ejecutar código con una expresión cron (ej: cada noche).</td><td>Iguales que Batch.</td></tr>
+            </tbody>
+        </table>
+
+        <div class="topic-box">
+            <h3>Batch Apex — Estructura obligatoria</h3>
+            <pre><code>global class BorrarLeadsViejos implements Database.Batchable&lt;sObject&gt; {
+    // 1. start: define qué registros procesar
+    global Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator('SELECT Id FROM Lead WHERE CreatedDate &lt; LAST_N_YEARS:2');
+    }
+    // 2. execute: lógica sobre cada chunk (default 200 registros)
+    global void execute(Database.BatchableContext bc, List&lt;Lead&gt; scope) {
+        delete scope;
+    }
+    // 3. finish: notificación o limpieza
+    global void finish(Database.BatchableContext bc) {
+        Messaging.sendEmail(...);
+    }
+}</code></pre>
+        </div>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> Los métodos <code>@future</code> no pueden recibir sObjects como parámetros (solo primitivos como String, Integer, Set&lt;Id&gt;). Usa Queueable si necesitas pasar objetos complejos.
+        </div>
+    </section>
+
+    <!-- 6. EXCEPCIONES -->
+    <section class="content-section">
+        <h2 class="section-header">6. Manejo de Excepciones y DML Parcial</h2>
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>Try-Catch</h3>
+                <pre><code>try {
+    insert nuevasCuentas;
+} catch (DmlException e) {
+    System.debug(e.getDmlMessage(0));
+} catch (Exception e) {
+    System.debug(e.getMessage());
+} finally {
+    // siempre se ejecuta
+}</code></pre>
+            </div>
+            <div class="topic-box">
+                <h3>Database.insert con allOrNone=false</h3>
+                <p>Por defecto, si un registro falla → rollback total. Con <code>allOrNone=false</code> permites fallos parciales:</p>
+                <pre><code>List&lt;Database.SaveResult&gt; results =
+    Database.insert(listaRegistros, false);
+
+for (Database.SaveResult sr : results) {
+    if (!sr.isSuccess()) {
+        System.debug(sr.getErrors()[0].getMessage());
+    }
+}</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>Joan Mata & Konozca &copy; 2026 | Salesforce Developer Reference Guide</p>
+    </footer>
+</div>
+</body>
+</html>

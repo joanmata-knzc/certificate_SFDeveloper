@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Interface (LWC) — Salesforce PDI Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dev_style.css">
+</head>
+<body>
+
+<div class="back-bar">
+    <div class="container">
+        <a href="INDEX_START_HERE.html" class="back-link">← Volver al Índice</a>
+        <span class="page-label">Bloque 3 · User Interface · 25% del examen</span>
+    </div>
+</div>
+
+<div class="container">
+    <div class="page-header">
+        <span class="brand-tag" style="background:#ecfeff; color:var(--dev-cyan);">User Interface</span>
+        <h1>Lightning Web Components y UI</h1>
+        <p>El estándar moderno de Salesforce para construir interfaces: LWC, Aura y Visualforce.</p>
+    </div>
+
+    <!-- 1. ESTRUCTURA LWC -->
+    <section class="content-section">
+        <h2 class="section-header">1. Lightning Web Components — Estructura</h2>
+
+        <div class="highlight-box">
+            <strong>LWC está basado en estándares web nativos</strong> (Web Components, ES6+, Shadow DOM). No es un framework propietario, lo que lo hace más rápido y cercano al JavaScript moderno.
+        </div>
+
+        <div class="topic-box">
+            <h3>📁 Archivos de un componente LWC</h3>
+            <p>Un componente se define en una carpeta con el mismo nombre y hasta 5 archivos:</p>
+            <table class="compare-table">
+                <thead><tr><th>Archivo</th><th>Propósito</th><th>Obligatorio</th></tr></thead>
+                <tbody>
+                    <tr><td>componentName.html</td><td>Template HTML (estructura visual). Debe tener <code>&lt;template&gt;</code> como raíz.</td><td>✅</td></tr>
+                    <tr><td>componentName.js</td><td>Lógica JavaScript. Clase que extiende <code>LightningElement</code>.</td><td>✅</td></tr>
+                    <tr><td>componentName.js-meta.xml</td><td>Configuración del componente (dónde puede usarse: App Builder, Flow, etc.).</td><td>✅</td></tr>
+                    <tr><td>componentName.css</td><td>Estilos con Shadow DOM (aislados del resto de la página).</td><td>❌</td></tr>
+                    <tr><td>componentName.svg</td><td>Icono personalizado para el App Builder.</td><td>❌</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="topic-box">
+            <h3>Ejemplo de componente completo</h3>
+            <pre><code>&lt;!-- miComponente.html --&gt;
+&lt;template&gt;
+    &lt;lightning-card title="Cuenta"&gt;
+        &lt;p&gt;Nombre: {nombreCuenta}&lt;/p&gt;
+        &lt;lightning-button label="Guardar" onclick={handleGuardar}&gt;&lt;/lightning-button&gt;
+    &lt;/lightning-card&gt;
+&lt;/template&gt;</code></pre>
+            <pre><code>// miComponente.js
+import { LightningElement, api, track, wire } from 'lwc';
+import getNombreCuenta from '@salesforce/apex/CuentaController.getNombre';
+
+export default class MiComponente extends LightningElement {
+    @api recordId;           // Propiedad pública (recibe del padre o del contexto)
+    @track nombreCuenta;     // Reactivo (para objetos/arrays internos)
+
+    @wire(getNombreCuenta, { accId: '$recordId' })
+    wiredCuenta({ data, error }) {
+        if (data) this.nombreCuenta = data;
+    }
+
+    handleGuardar() {
+        // lógica al hacer click
+    }
+}</code></pre>
+        </div>
+    </section>
+
+    <!-- 2. DECORADORES -->
+    <section class="content-section">
+        <h2 class="section-header">2. Decoradores LWC</h2>
+
+        <table class="compare-table">
+            <thead><tr><th>Decorador</th><th>Propósito</th><th>Dirección</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>@api</td>
+                    <td>Hace una propiedad o método <strong>públicos</strong>. Permite que el componente padre pase datos al hijo. Reactivo automáticamente.</td>
+                    <td>Padre → Hijo</td>
+                </tr>
+                <tr>
+                    <td>@track</td>
+                    <td>Hace una propiedad reactiva cuando cambian propiedades <strong>internas de un objeto o array</strong>. Para primitivos no es necesario (ya son reactivos por defecto).</td>
+                    <td>Interno</td>
+                </tr>
+                <tr>
+                    <td>@wire</td>
+                    <td>Conecta la propiedad a un <strong>servicio reactivo</strong>: una función Apex con <code>@AuraEnabled(cacheable=true)</code> o un wire adapter estándar (como <code>getRecord</code>).</td>
+                    <td>Salesforce → Componente</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> Para usar <code>@wire</code> con Apex, el método Apex DEBE tener <code>@AuraEnabled(cacheable=true)</code>. Si el método modifica datos (no es de solo lectura), no puede ser cacheable y debes llamarlo imperativa mente con <code>callApexMethod().then(...)</code>.
+        </div>
+    </section>
+
+    <!-- 3. COMUNICACIÓN -->
+    <section class="content-section">
+        <h2 class="section-header">3. Comunicación entre Componentes</h2>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>⬇️ Padre a Hijo — @api</h3>
+                <p>El padre pasa datos mediante atributos HTML en el template.</p>
+                <pre><code>&lt;!-- En el padre --&gt;
+&lt;c-hijo-componente nombre="Acme" record-id={cuentaId}&gt;&lt;/c-hijo-componente&gt;
+
+// En el hijo
+@api nombre;
+@api recordId;</code></pre>
+            </div>
+            <div class="topic-box">
+                <h3>⬆️ Hijo a Padre — CustomEvent</h3>
+                <p>El hijo dispara un evento personalizado; el padre lo escucha.</p>
+                <pre><code>// En el hijo — dispara el evento
+this.dispatchEvent(new CustomEvent('guardar', {
+    detail: { nombreCuenta: this.nombre }
+}));
+
+&lt;!-- En el padre — escucha el evento --&gt;
+&lt;c-hijo-componente onguar dar={handleGuardar}&gt;&lt;/c-hijo-componente&gt;
+
+// En el padre — manejador
+handleGuardar(event) {
+    console.log(event.detail.nombreCuenta);
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="topic-box">
+            <h3>📡 Entre Componentes No Relacionados — Lightning Message Service (LMS)</h3>
+            <p>Para comunicar componentes que no están en la misma jerarquía (ej: un componente en la barra lateral con uno en el área principal de la página).</p>
+            <ul>
+                <li>Requiere un <strong>Message Channel</strong> (.messageChannel-meta.xml).</li>
+                <li>El emisor usa <code>publish()</code> y el receptor usa <code>subscribe()</code>.</li>
+                <li>Funciona tanto entre LWC como entre LWC y Aura.</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- 4. CICLO DE VIDA -->
+    <section class="content-section">
+        <h2 class="section-header">4. Ciclo de Vida de un Componente LWC</h2>
+
+        <div class="topic-box">
+            <h3>🔄 Hooks de ciclo de vida</h3>
+            <table class="compare-table">
+                <thead><tr><th>Hook</th><th>Cuándo se ejecuta</th><th>Uso típico</th></tr></thead>
+                <tbody>
+                    <tr><td>constructor()</td><td>Al instanciar el componente. El DOM no existe aún.</td><td>Inicializar variables. No acceder al DOM.</td></tr>
+                    <tr><td>connectedCallback()</td><td>Cuando el componente se inserta en el DOM.</td><td>Cargar datos, añadir event listeners externos.</td></tr>
+                    <tr><td>renderedCallback()</td><td>Después de cada renderizado del componente.</td><td>Manipular el DOM después de renderizar. Cuidado: puede ejecutarse múltiples veces.</td></tr>
+                    <tr><td>disconnectedCallback()</td><td>Cuando el componente se elimina del DOM.</td><td>Limpiar event listeners para evitar memory leaks.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- 5. VISUALFORCE Y AURA -->
+    <section class="content-section">
+        <h2 class="section-header">5. Visualforce y Aura Components (Legado)</h2>
+
+        <div class="info-grid">
+            <div class="topic-box">
+                <h3>📄 Visualforce</h3>
+                <p>Tecnología de páginas web propietaria de Salesforce. Usa etiquetas <code>&lt;apex:...&gt;</code>.</p>
+                <ul>
+                    <li><strong>Standard Controller:</strong> Lógica básica del objeto (save, edit, delete) sin código.</li>
+                    <li><strong>Controller Extension:</strong> Añade lógica a un controlador estándar sin reemplazarlo.</li>
+                    <li><strong>Custom Controller:</strong> Control total con Apex, sin usar el controlador estándar.</li>
+                    <li><strong>Cuándo usarlo:</strong> Para generar PDFs, páginas de inicio de sesión personalizadas, o formularios web externos.</li>
+                </ul>
+            </div>
+            <div class="topic-box">
+                <h3>⚡ Aura Components</h3>
+                <p>Predecesor de LWC, más verboso. Aún presente en orgs antiguas.</p>
+                <ul>
+                    <li>Usa <code>&lt;aura:component&gt;</code> como raíz.</li>
+                    <li>Los atributos se definen con <code>&lt;aura:attribute&gt;</code>.</li>
+                    <li>Los eventos con <code>&lt;aura:registerEvent&gt;</code> y <code>&lt;aura:handler&gt;</code>.</li>
+                    <li><strong>LWC puede embeberse dentro de Aura</strong> pero no al revés (compatibilidad de sentido único).</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="exam-tip">
+            <strong>💡 Tip de Examen:</strong> Para proyectos nuevos, Salesforce siempre recomienda <strong>LWC</strong>. Usa Visualforce solo si necesitas generar PDFs (<code>renderAs="pdf"</code>) o para páginas heredadas. En el examen, si preguntan cuál usar en una app nueva, la respuesta es siempre LWC.
+        </div>
+    </section>
+
+    <footer>
+        <p>Joan Mata & Konozca &copy; 2026 | Salesforce Developer Reference Guide</p>
+    </footer>
+</div>
+</body>
+</html>
